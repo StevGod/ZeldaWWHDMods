@@ -437,6 +437,35 @@
         "minimum": "0.5.0"
       },
       "experimental": true
-    }
+    },
+	{
+	  "id": "auto-tracker",
+	  "name": "Auto Tracker",
+	  "description": "Reads live game state and shares inventory information with the WWHD AutoTracker application.",
+	  "version": "0.1.0",
+	  "kind": "guest",
+	  "setup": [
+		{
+		  "id": "build",
+		  "type": "build_guest_mod",
+		  "title": "Build Auto Tracker for this installation"
+		}
+	  ],
+	  "authors": [
+		"StevGod"
+	  ],
+	  "licences": [
+		"MPL-2.0"
+	  ],
+	  "builds": [
+		"USA",
+		"EU"
+	  ],
+	  "requires": [],
+	  "port_versions": {
+		"minimum": "0.5.0"
+	  },
+	  "experimental": true
+	},
   ]
 }
