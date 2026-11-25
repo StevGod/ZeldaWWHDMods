@@ -1,0 +1,24 @@
+
+{
+  "format_version": 1,
+  "id": "auto-tracker",
+  "name": "Auto Tracker",
+  "version": "0.1.0",
+  "game_id": "wwhd",
+  "minimum_manager_version": "1.5.0",
+  "kind": "guest",
+  "guest": {
+    "api_version": 1,
+    "elf": "mod.elf"
+  },
+  "author": "YOUR_GITHUB_USERNAME",
+  "description": "Reads live game state and shares inventory information with the WWHD AutoTracker.",
+  "experimental": true,
+  "setup": [
+    {
+      "id": "build",
+      "type": "build_guest_mod",
+      "title": "Build AutoTracker for this installation"
+    }
+  ]
+}
