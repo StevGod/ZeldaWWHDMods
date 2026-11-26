@@ -1,7 +1,7 @@
-
 #include "tracker.h"
 #include "game_state.h"
 #include "inventory.h"
+#include "equipment.h"
 #include "file_writer.h"
 #include "wwhd_guest.h"
 
@@ -29,10 +29,22 @@ static bool inventory_changed(
         current->skull_hammer != previous->skull_hammer;
 }
 
+static bool equipment_changed(
+    const TrackerEquipment* current,
+    const TrackerEquipment* previous
+) {
+    return
+        current->sword_level != previous->sword_level ||
+        current->shield_level != previous->shield_level;
+}
+
 void tracker_update(void) {
     static TrackerGameState state;
     static TrackerInventory inventory;
+    static TrackerEquipment equipment;
+
     static TrackerInventory last_exported_inventory;
+    static TrackerEquipment last_exported_equipment;
 
     static unsigned int last_logged_health = 0xFFFF;
     static unsigned int last_logged_max_health = 0xFFFF;
@@ -52,14 +64,22 @@ void tracker_update(void) {
     static int last_hookshot = -1;
     static int last_skull_hammer = -1;
 
+    static int last_sword_entry = -1;
+    static int last_shield_entry = -1;
+
+    static int last_sword_level = -1;
+    static int last_shield_level = -1;
+
     static int was_connected = 0;
     static int has_exported_state = 0;
     static int last_exported_inventory_valid = 0;
+    static int last_exported_equipment_valid = 0;
 
     /* Read the current game state. */
     if (!game_state_read(&state)) {
         if (was_connected) {
             file_writer_write_disconnected();
+
             was_connected = 0;
             has_exported_state = 0;
         }
@@ -67,8 +87,9 @@ void tracker_update(void) {
         return;
     }
 
-    /* Read inventory exactly once. */
+    /* Read inventory and equipment. */
     bool inventory_valid = inventory_read(&inventory);
+    bool equipment_valid = equipment_read(&equipment);
 
     /* Log health changes. */
     if (state.current_health != last_logged_health) {
@@ -135,7 +156,30 @@ void tracker_update(void) {
         }
     }
 
-        /* Check whether the game state has changed since the last export. */
+    /* Log equipment changes. */
+    if (equipment_valid) {
+        if ((int)equipment.sword_entry != last_sword_entry) {
+            wwhd_log_int("Sword equip entry (raw)", equipment.sword_entry);
+            last_sword_entry = equipment.sword_entry;
+        }
+
+        if ((int)equipment.shield_entry != last_shield_entry) {
+            wwhd_log_int("Shield equip entry (raw)", equipment.shield_entry);
+            last_shield_entry = equipment.shield_entry;
+        }
+
+        if ((int)equipment.sword_level != last_sword_level) {
+            wwhd_log_int("Sword level", equipment.sword_level);
+            last_sword_level = equipment.sword_level;
+        }
+
+        if ((int)equipment.shield_level != last_shield_level) {
+            wwhd_log_int("Shield level", equipment.shield_level);
+            last_shield_level = equipment.shield_level;
+        }
+    }
+
+    /* Check whether the game state has changed since the last export. */
     bool state_changed =
         !has_exported_state ||
         state.current_health != last_exported_health ||
@@ -148,9 +192,28 @@ void tracker_update(void) {
         (inventory_valid &&
          inventory_changed(&inventory, &last_exported_inventory));
 
+    bool equipment_state_changed =
+        !has_exported_state ||
+        equipment_valid != last_exported_equipment_valid ||
+        (equipment_valid &&
+         equipment_changed(&equipment, &last_exported_equipment));
+
     /* Write JSON whenever something changes. */
-    if (state_changed || inventory_state_changed) {
-        if (file_writer_write(&state, &inventory, inventory_valid)) {
+    if (state_changed ||
+        inventory_state_changed ||
+        equipment_state_changed) {
+
+        int write_success = file_writer_write(
+            &state,
+            &inventory,
+            inventory_valid,
+            &equipment,
+            equipment_valid
+        );
+
+        if (write_success) {
+            wwhd_log_int("JSON write successful", 1);
+
             was_connected = 1;
             has_exported_state = 1;
 
@@ -159,10 +222,17 @@ void tracker_update(void) {
             last_exported_rupees = state.rupees;
 
             last_exported_inventory_valid = inventory_valid;
+            last_exported_equipment_valid = equipment_valid;
 
             if (inventory_valid) {
                 last_exported_inventory = inventory;
             }
+
+            if (equipment_valid) {
+                last_exported_equipment = equipment;
+            }
+        } else {
+            wwhd_log_int("JSON write failed", 1);
         }
     }
 }

@@ -1,8 +1,7 @@
-
 #include "file_writer.h"
 #include "wwhd_guest.h"
 
-#define JSON_BUFFER_SIZE 768
+#define JSON_BUFFER_SIZE 1024
 
 static bool append_text(
     char* buffer,
@@ -23,6 +22,39 @@ static bool append_text(
     }
 
     buffer[*length] = '\0';
+    return true;
+}
+
+static bool append_uint(
+    char* buffer,
+    unsigned int capacity,
+    unsigned int* length,
+    unsigned int value
+) {
+    char digits[10];
+    unsigned int count = 0;
+
+    do {
+        digits[count++] = (char)('0' + (value % 10));
+        value /= 10;
+    } while (value > 0 && count < sizeof(digits));
+
+    while (count > 0) {
+        char character[2] = {
+            digits[--count],
+            '\0'
+        };
+
+        if (!append_text(
+            buffer,
+            capacity,
+            length,
+            character
+        )) {
+            return false;
+        }
+    }
+
     return true;
 }
 
@@ -69,12 +101,16 @@ static bool append_inventory_value(
 int file_writer_write(
     const TrackerGameState* state,
     const TrackerInventory* inventory,
-    bool inventory_valid
+    bool inventory_valid,
+    const TrackerEquipment* equipment,
+    bool equipment_valid
 ) {
     char json[JSON_BUFFER_SIZE];
     unsigned int length = 0;
 
-    if (state == 0 || inventory == 0) {
+    if (state == 0 ||
+        inventory == 0 ||
+        equipment == 0) {
         return 0;
     }
 
@@ -85,69 +121,38 @@ int file_writer_write(
         "\"connected\":true,"
         "\"current_health\":")) return 0;
 
-    /* Current health */
-    {
-        char digits[6];
-        unsigned int value = state->current_health;
-        unsigned int count = 0;
-
-        do {
-            digits[count++] = (char)('0' + (value % 10));
-            value /= 10;
-        } while (value > 0 && count < sizeof(digits));
-
-        while (count > 0) {
-            char character[2] = { digits[--count], '\0' };
-            if (!append_text(json, sizeof(json), &length, character)) return 0;
-        }
-    }
+    if (!append_uint(
+        json, sizeof(json), &length,
+        state->current_health
+    )) return 0;
 
     if (!append_text(json, sizeof(json), &length,
         ",\"maximum_health\":")) return 0;
 
-    /* Maximum health */
-    {
-        char digits[6];
-        unsigned int value = state->maximum_health;
-        unsigned int count = 0;
-
-        do {
-            digits[count++] = (char)('0' + (value % 10));
-            value /= 10;
-        } while (value > 0 && count < sizeof(digits));
-
-        while (count > 0) {
-            char character[2] = { digits[--count], '\0' };
-            if (!append_text(json, sizeof(json), &length, character)) return 0;
-        }
-    }
+    if (!append_uint(
+        json, sizeof(json), &length,
+        state->maximum_health
+    )) return 0;
 
     if (!append_text(json, sizeof(json), &length,
         ",\"rupees\":")) return 0;
 
-    /* Rupees */
-    {
-        char digits[6];
-        unsigned int value = state->rupees;
-        unsigned int count = 0;
+    if (!append_uint(
+        json, sizeof(json), &length,
+        state->rupees
+    )) return 0;
 
-        do {
-            digits[count++] = (char)('0' + (value % 10));
-            value /= 10;
-        } while (value > 0 && count < sizeof(digits));
-
-        while (count > 0) {
-            char character[2] = { digits[--count], '\0' };
-            if (!append_text(json, sizeof(json), &length, character)) return 0;
-        }
-    }
-
+    /* Inventory */
     if (!append_text(json, sizeof(json), &length,
         ",\"inventory_available\":")) return 0;
 
-    if (!append_bool(json, sizeof(json), &length, inventory_valid)) return 0;
+    if (!append_bool(
+        json, sizeof(json), &length,
+        inventory_valid
+    )) return 0;
 
-    if (!append_text(json, sizeof(json), &length, ",\"inventory\":{")) return 0;
+    if (!append_text(json, sizeof(json), &length,
+        ",\"inventory\":{")) return 0;
 
     if (!append_inventory_value(json, sizeof(json), &length,
         "telescope", inventory->telescope, inventory_valid, true)) return 0;
@@ -184,9 +189,46 @@ int file_writer_write(
     if (!append_inventory_value(json, sizeof(json), &length,
         "skull_hammer", inventory->skull_hammer, inventory_valid, false)) return 0;
 
+    /* Equipment */
+    if (!append_text(json, sizeof(json), &length,
+        "},\"equipment_available\":")) return 0;
+
+    if (!append_bool(
+        json, sizeof(json), &length,
+        equipment_valid
+    )) return 0;
+
+    if (!append_text(json, sizeof(json), &length,
+        ",\"equipment\":{\"sword\":")) return 0;
+
+    if (equipment_valid) {
+        if (!append_uint(
+            json, sizeof(json), &length,
+            equipment->sword_level
+        )) return 0;
+    } else {
+        if (!append_text(json, sizeof(json), &length, "null")) return 0;
+    }
+
+    if (!append_text(json, sizeof(json), &length,
+        ",\"shield\":")) return 0;
+
+    if (equipment_valid) {
+        if (!append_uint(
+            json, sizeof(json), &length,
+            equipment->shield_level
+        )) return 0;
+    } else {
+        if (!append_text(json, sizeof(json), &length, "null")) return 0;
+    }
+
     if (!append_text(json, sizeof(json), &length, "}}")) return 0;
 
-    return wwhd_file_write("tracker_state.json", json, length) > 0;
+    return wwhd_file_write(
+        "tracker_state.json",
+        json,
+        length
+    ) > 0;
 }
 
 int file_writer_write_disconnected(void) {
